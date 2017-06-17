@@ -37,7 +37,7 @@ namespace EfCore.NestedSets.Tests
                 {
                     command.Connection = sqlConn;
 
-                    var scripts = Regex.Split(CreateDb, @"^GO\r?$", RegexOptions.Multiline);
+                    var scripts = Regex.Split(sql, @"^GO\r?$", RegexOptions.Multiline);
                     foreach (var splitScript in scripts)
                     {
                         if (!string.IsNullOrWhiteSpace(splitScript))

@@ -1,34 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 
 namespace EfCore.NestedSets
 {
-    public class NestedSetManager<T, TKey, TNullableKey>
+    public class NestedSetManager<TDbContext, T, TKey, TNullableKey>
         where T : class, INestedSet<T, TKey, TNullableKey>
+        where TDbContext : DbContext
     {
         private readonly DbContext _db;
+
+        private static IQueryable<T> QueryById(IQueryable<T> nodes, TKey id)
+        {
+            return nodes.Where(_PropertyEqualsExpression(nameof(INestedSet<T, TKey, TNullableKey>.Id), id));
+        }
 
         private IQueryable<T> GetNodes(TNullableKey rootId)
         {
             return _nodesSet.Where(PropertyEqualsExpression(nameof(INestedSet<T, TKey, TNullableKey>.RootId), rootId));
         }
 
-        private IQueryable<T> GetNodes(TKey rootId)
-        {
-            return _nodesSet.Where(PropertyEqualsExpression(nameof(INestedSet<T, TKey, TNullableKey>.RootId), rootId));
-        }
-
         private readonly DbSet<T> _nodesSet;
 
-        public NestedSetManager(DbContext dbContext, DbSet<T> nodesSource)
+        public NestedSetManager(TDbContext dbContext, Expression<Func<TDbContext, DbSet<T>>> nodesSourceExpression)
         {
             _db = dbContext;
-            _nodesSet = nodesSource;
+            var propertyInfo = new PropertySelectorVisitor(nodesSourceExpression).Property;
+            _nodesSet = (DbSet<T>)propertyInfo.GetValue(dbContext);
         }
 
         private Expression<Func<T, bool>> PropertyEqualsExpression(string propertyName, TKey key)
@@ -337,7 +338,7 @@ namespace EfCore.NestedSets
                 nodeTreeRoot.Root = nodeTreeRoot;
                 _db.SaveChanges();
             }
-            else if(Equals(rootId, default(TNullableKey)))
+            else if (Equals(rootId, default(TNullableKey)))
             {
                 var rootIds = newNodes.Select(n => n.RootId).Distinct().ToArray();
                 if (rootIds.Length > 1)
@@ -359,7 +360,7 @@ namespace EfCore.NestedSets
                 }
                 _db.SaveChanges();
             }
-            else if(!isRoot)
+            else if (!isRoot)
             {
                 throw new Exception("Unable to determine root ID of non-root node");
             }
@@ -386,9 +387,25 @@ namespace EfCore.NestedSets
             return (TNullableKey)(object)id;
         }
 
-        private static TKey ToNonNullableKey(TNullableKey id)
+        /// <summary>
+        /// Returns all descendants of a node
+        /// </summary>
+        /// <param name="nodeId">The node for which to find the path to</param>
+        /// <returns></returns>
+        public IQueryable<T> GetDescendants(TKey nodeId)
         {
-            return (TKey)(object)id;
+            var node = QueryById(_nodesSet, nodeId).Select(n => new { n.Left, n.Right, n.RootId }).Single();
+            return _nodesSet.Where(n => n.Left > node.Left && n.Right < node.Right);
+        }
+
+        /// <summary>
+        /// Returns the path to a given node, i.e. its ancestors
+        /// </summary>
+        /// <param name="nodeId">The node for which to find the path to</param>
+        /// <returns></returns>
+        public IQueryable<T> GetImmediateChildren(TKey nodeId)
+        {
+            return _nodesSet.Where(PropertyEqualsExpression(nameof(INestedSet<T, TKey, TNullableKey>.ParentId), (TNullableKey)(object)nodeId));
         }
 
         /// <summary>
