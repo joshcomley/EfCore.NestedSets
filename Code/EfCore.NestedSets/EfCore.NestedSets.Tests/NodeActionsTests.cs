@@ -1,4 +1,5 @@
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace EfCore.NestedSets.Tests
@@ -10,6 +11,7 @@ namespace EfCore.NestedSets.Tests
         public void SetUp()
         {
             DbSql.CreateDatabase();
+            new AppDbContext().Database.Migrate();
         }
 
         [TestCleanup]
@@ -292,7 +294,7 @@ namespace EfCore.NestedSets.Tests
             }
         }
 
-        private static void AssertDb(int rootId, params Node[] expectedNodes)
+        private static void AssertDb(int? rootId, params Node[] expectedNodes)
         {
             using (var db = new AppDbContext())
             {

@@ -14,9 +14,7 @@ namespace EfCore.NestedSets.Tests
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Node>()
-                .Ignore(b => b.Moving);
+            modelBuilder.ConfigureNestedSets<Node, int, int?>();
         }
     }
-
 }
