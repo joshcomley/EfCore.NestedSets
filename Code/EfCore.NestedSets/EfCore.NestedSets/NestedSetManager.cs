@@ -369,7 +369,7 @@ namespace EfCore.NestedSets
             {
                 if (newNode != nodeTreeRoot)
                 {
-                    var path = PathToNode(newNode, newNodes);
+                    var path = GetPathToNode(newNode, newNodes).Reverse();
                     var current = newNode;
                     foreach (var ancestor in path)
                     {
@@ -394,12 +394,26 @@ namespace EfCore.NestedSets
         /// <returns></returns>
         public IQueryable<T> GetDescendants(TKey nodeId)
         {
-            var node = QueryById(_nodesSet, nodeId).Select(n => new { n.Left, n.Right, n.RootId }).Single();
+            var node = GetNodeData(nodeId);
             return _nodesSet.Where(n => n.Left > node.Left && n.Right < node.Right);
         }
 
+        private NodeData<TNullableKey> GetNodeData(TKey nodeId)
+        {
+            var node = QueryById(_nodesSet, nodeId)
+                .Select(n => new NodeData<TNullableKey> {Left = n.Left, Right = n.Right, RootId = n.RootId}).Single();
+            return node;
+        }
+
+        private class NodeData<TNullableKey>
+        {
+            public int Left { get; set; }
+            public int Right { get; set; }
+            public TNullableKey RootId { get; set; }
+        }
+
         /// <summary>
-        /// Returns the path to a given node, i.e. its ancestors
+        /// Returns the immediate children of a given node, i.e. its ancestors
         /// </summary>
         /// <param name="nodeId">The node for which to find the path to</param>
         /// <returns></returns>
@@ -411,11 +425,22 @@ namespace EfCore.NestedSets
         /// <summary>
         /// Returns the path to a given node, i.e. its ancestors
         /// </summary>
+        /// <param name="nodeId">The node for which to find the path to</param>
+        /// <returns></returns>
+        public IOrderedEnumerable<T> GetPathToNode(TKey nodeId)
+        {
+            var node = GetNodeData(nodeId);
+            return GetPathToNode(node, GetNodes(node.RootId));
+        }
+
+        /// <summary>
+        /// Returns the path to a given node, i.e. its ancestors
+        /// </summary>
         /// <param name="node">The node for which to find the path to</param>
         /// <returns></returns>
-        public List<T> PathToNode(T node)
+        public IOrderedEnumerable<T> GetPathToNode(T node)
         {
-            return PathToNode(node, GetNodes(node.RootId));
+            return GetPathToNode(node, GetNodes(node.RootId));
         }
 
         /// <summary>
@@ -424,11 +449,28 @@ namespace EfCore.NestedSets
         /// <param name="node">The node for which to find the path to</param>
         /// <param name="nodeSet">The set of nodes to limit the search to</param>
         /// <returns></returns>
-        public static List<T> PathToNode(T node, IEnumerable<T> nodeSet)
+        public static IOrderedEnumerable<T> GetPathToNode(T node, IEnumerable<T> nodeSet)
         {
-            return nodeSet.Where(n => n.Left < node.Left && n.Right > node.Right)
-                .OrderByDescending(n => n.Left)
-                .ToList();
+            return GetPathToNode(AsNodeData(node), nodeSet);
+        }
+
+        private static NodeData<TNullableKey> AsNodeData(T node)
+        {
+            return new NodeData<TNullableKey> {Left = node.Left, Right = node.Right, RootId = node.RootId};
+        }
+
+        /// <summary>
+        /// Returns the path to a given node within a set of nodes, i.e. its ancestors
+        /// </summary>
+        /// <param name="node">The node for which to find the path to</param>
+        /// <param name="nodeSet">The set of nodes to limit the search to</param>
+        /// <returns></returns>
+        private static IOrderedEnumerable<T> GetPathToNode(NodeData<TNullableKey> node, IEnumerable<T> nodeSet)
+        {
+            return nodeSet
+                    .Where(n => n.Left < node.Left && n.Right > node.Right)
+                    .OrderBy(n => n.Left)
+                ;
         }
 
         private T GetNode(TNullableKey id)

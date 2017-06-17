@@ -75,9 +75,9 @@ namespace EfCore.NestedSets.Tests
             // Action
             var result = _ns.GetDescendants(_nat.Pets.Id).ToList();
             // Assert
-            AssertResults(result, 
-                _nat.Humans, 
-                _nat.Males, 
+            AssertResults(result,
+                _nat.Humans,
+                _nat.Males,
                 _nat.Hairy,
                 _nat.NonHairy,
                 _nat.Josh,
@@ -88,14 +88,72 @@ namespace EfCore.NestedSets.Tests
                 _nat.Tigers);
         }
 
+        [TestMethod]
+        public void TestSelectPathToNode1()
+        {
+            // Arrange
+            _nat.TestMoveToSiblingRight();
+            // Action
+            var result = _ns.GetPathToNode(_nat.HouseCats.Id).ToList();
+            // Assert
+            AssertResultsAndOrder(result,
+                _nat.Animals,
+                _nat.Pets,
+                _nat.Cats
+            );
+        }
+
+        [TestMethod]
+        public void TestSelectPathToNode2()
+        {
+            // Arrange
+            _nat.TestMoveToSiblingRight();
+            // Action
+            var result = _ns.GetPathToNode(_nat.Humans.Id).ToList();
+            // Assert
+            AssertResultsAndOrder(result,
+                _nat.Animals,
+                _nat.Pets
+            );
+        }
+
+        [TestMethod]
+        public void TestSelectPathToNode3()
+        {
+            // Arrange
+            _nat.TestInsertChildToRight();
+            // Action
+            var result = _ns.GetPathToNode(_nat.Dogs.Id).ToList();
+            // Assert
+            AssertResultsAndOrder(result,
+                _nat.Animals
+            );
+        }
+
+        private static void AssertResultsAndOrder(IEnumerable<Node> nodesQuery, params Node[] expectedNodes)
+        {
+            AssertResults(nodesQuery, true, expectedNodes);
+        }
+
         private static void AssertResults(IEnumerable<Node> nodesQuery, params Node[] expectedNodes)
+        {
+            AssertResults(nodesQuery, false, expectedNodes);
+        }
+
+        private static void AssertResults(IEnumerable<Node> nodesQuery, bool checkOrder, params Node[] expectedNodes)
         {
             var actualNodes = nodesQuery.ToList();
             Assert.AreEqual(actualNodes.Count, actualNodes.Count);
+            var index = 0;
             foreach (var expectedNode in expectedNodes)
             {
                 var node = actualNodes.SingleOrDefault(n => n.Name == expectedNode.Name);
                 Assert.IsNotNull(node);
+                if (checkOrder)
+                {
+                    Assert.AreEqual(index, actualNodes.IndexOf(node));
+                }
+                index++;
             }
         }
     }
