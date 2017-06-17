@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 
 namespace EfCore.NestedSets
 {
@@ -11,19 +10,24 @@ namespace EfCore.NestedSets
         where T : class, INestedSet<TKey, TNullableKey>
     {
         private readonly DbContext _db;
-        private readonly DbSet<T> _nodes;
+
+        private IQueryable<T> GetNodes(TKey rootId)
+        {
+            return _nodesSet.Where(PropertyEqualsExpression(nameof(INestedSet<TKey, TNullableKey>.RootId), rootId));
+        }
+
+        private readonly DbSet<T> _nodesSet;
 
         public NestedSetManager(DbContext dbContext, DbSet<T> nodesSource)
         {
             _db = dbContext;
-            _nodes = nodesSource;
+            _nodesSet = nodesSource;
         }
 
-        private Expression<Func<T, bool>> KeyEqualsExpression(TKey key)
+        private Expression<Func<T, bool>> PropertyEqualsExpression(string propertyName, TKey key)
         {
             // TODO: Blog about needing a parameter name here, looks like a bug
             var parameterExpression = Expression.Parameter(typeof(T), "entity");
-            var propertyName = nameof(INestedSet<string, string>.Id);
             if (string.IsNullOrEmpty(propertyName))
                 throw new NotSupportedException();
             return Expression.Lambda<Func<T, bool>>(
@@ -33,17 +37,18 @@ namespace EfCore.NestedSets
 
         public List<T> Delete(TKey nodeId, bool soft = false)
         {
-            var nodeToDelete = _nodes.Single(KeyEqualsExpression(nodeId));
+            var nodeToDelete = GetNode(nodeId);
             var nodeToDeleteLeft = nodeToDelete.Left;
             var difference = nodeToDelete.Right - nodeToDelete.Left + 1;
-            var deleted = _nodes.Where(s => s.Left >= nodeToDelete.Left && s.Right <= nodeToDelete.Right).ToList();
+            var rootId = nodeToDelete.RootId;
+            var deleted = GetNodes(rootId).Where(s => s.Left >= nodeToDelete.Left && s.Right <= nodeToDelete.Right).ToList();
             if (soft)
                 foreach (var node in deleted)
                     node.Moving = true;
             else
                 foreach (var node in deleted)
-                    _nodes.Remove(node);
-            var nodesToUpdate = _nodes.Where(s => s.Left > nodeToDelete.Left || s.Right >= nodeToDelete.Left).ToList();
+                    _nodesSet.Remove(node);
+            var nodesToUpdate = GetNodes(rootId).Where(s => s.Left > nodeToDelete.Left || s.Right >= nodeToDelete.Left).ToList();
             foreach (var nodeToUpdate in nodesToUpdate)
             {
                 if (nodeToUpdate.Moving)
@@ -92,7 +97,7 @@ namespace EfCore.NestedSets
         public T InsertRoot(T node,
             NestedSetInsertMode insertMode)
         {
-            return Insert(default(TNullableKey), default(TNullableKey), new []{node}, insertMode).First();
+            return Insert(default(TNullableKey), default(TNullableKey), new[] { node }, insertMode).First();
         }
 
         public List<T> InsertRoot(IEnumerable<T> nodeTree,
@@ -148,16 +153,17 @@ namespace EfCore.NestedSets
             var nodeTreeRoot = nodeArray.Single(n => n.Left == lowestLeft);
             T parent = null;
             T sibling = null;
+            var isRoot = Equals(parentId, default(TNullableKey)) && Equals(siblingId, default(TNullableKey));
             if (!Equals(parentId, default(TNullableKey)) &&
                 insertMode == NestedSetInsertMode.Right)
             {
-                parent = _nodes.Single(KeyEqualsExpression((TKey)(object)parentId));
+                parent = GetNode(parentId);
                 if (parent == null)
                 {
                     throw new ArgumentException(string.Format("Unable to find node parent with ID of {0}", parentId));
                 }
                 var parent1 = parent;
-                var rightMostImmediateChild = _nodes
+                var rightMostImmediateChild = GetNodes(parent.RootId)
                     .Where(s => s.Left >= parent1.Left && s.Right <= parent1.Right && s.Level == parent1.Level + 1)
                     .OrderByDescending(s => s.Right)
                     .ToList()
@@ -169,20 +175,23 @@ namespace EfCore.NestedSets
             }
             int? siblingLeft = null;
             int? siblingRight = null;
+            TKey rootId = default(TKey);
             if (!Equals(siblingId, default(TNullableKey)))
             {
                 if (sibling == null)
-                    sibling = _nodes.Single(KeyEqualsExpression((TKey)(object)siblingId));
+                    sibling = GetNode(siblingId);
                 siblingLeft = sibling.Left;
                 siblingRight = sibling.Right;
                 parentId = sibling.ParentId;
+                rootId = sibling.RootId;
             }
             int? parentLeft = null;
             if (!Equals(parentId, null))
             {
                 if (parent == null)
-                    parent = _nodes.Single(KeyEqualsExpression((TKey)(object)parentId));
+                    parent = GetNode(parentId);
                 parentLeft = parent.Left;
+                rootId = parent.RootId;
             }
             var minLevel = nodeArray.Min(n => n.Level);
             foreach (var node in nodeArray)
@@ -200,7 +209,8 @@ namespace EfCore.NestedSets
                         IEnumerable<T> nodes;
                         if (sibling != null)
                         {
-                            nodes = _nodes.Where(s => s.Left >= siblingLeft || s.Right >= siblingRight).ToList()
+                            nodes = GetNodes(rootId)
+                                .Where(s => s.Left >= siblingLeft || s.Right >= siblingRight).ToList()
                                 .Where(n => !n.Moving)
                                 .ToList();
                             left = sibling.Left;
@@ -214,7 +224,7 @@ namespace EfCore.NestedSets
                         }
                         else if (parent != null)
                         {
-                            nodes = _nodes.Where(s => s.Right >= parentLeft).ToList()
+                            nodes = GetNodes(rootId).Where(s => s.Right >= parentLeft).ToList()
                                 .Where(n => !n.Moving)
                                 .ToList();
                             left = parent.Left + 1;
@@ -238,7 +248,8 @@ namespace EfCore.NestedSets
                         List<T> nodes;
                         if (sibling != null)
                         {
-                            nodes = _nodes.Where(s => s.Left > siblingRight || s.Right > siblingRight)
+                            nodes = GetNodes(rootId)
+                                .Where(s => s.Left > siblingRight || s.Right > siblingRight)
                                 .ToList()
                                 .Where(n => !n.Moving)
                                 .ToList();
@@ -253,7 +264,8 @@ namespace EfCore.NestedSets
                         }
                         else if (parent != null)
                         {
-                            nodes = _nodes.Where(s => s.Right >= parentLeft).ToList()
+                            nodes = GetNodes(rootId)
+                                .Where(s => s.Right >= parentLeft).ToList()
                                 .Where(n => !n.Moving)
                                 .ToList();
                             left = parent.Left + 1;
@@ -284,12 +296,34 @@ namespace EfCore.NestedSets
             var newNodes = nodeArray.Where(n => !n.Moving).ToList();
             if (newNodes.Any())
             {
-                _nodes.AddRange(newNodes);
+                _nodesSet.AddRange(newNodes);
             }
             var movingNodes = nodeArray.Where(n => n.Moving).ToList();
             foreach (var node in movingNodes)
                 node.Moving = false;
             _db.SaveChanges();
+            if (isRoot)
+            {
+                nodeTreeRoot.RootId = nodeTreeRoot.Id;
+                _db.SaveChanges();
+            }
+            else
+            {
+                var rootIds = newNodes.Select(n => n.RootId).Distinct().ToArray();
+                if (rootIds.Length > 1)
+                {
+                    throw new ArgumentException("Unable to identify root node ID of node tree as multiple have been supplied.");
+                }
+                if (rootIds.Length == 0 || (rootIds.Length == 1 && Equals(rootIds[0], default(TKey))))
+                {
+                    nodeTreeRoot.RootId = GetNodes(rootId).Single(n => n.Left == 1).Id;
+                    foreach (var newNode in newNodes)
+                    {
+                        newNode.RootId = nodeTreeRoot.RootId;
+                    }
+                    _db.SaveChanges();
+                }
+            }
             // Update the parent IDs now we have them
             foreach (var newNode in newNodes)
             {
@@ -307,6 +341,16 @@ namespace EfCore.NestedSets
             }
             _db.SaveChanges();
             return newNodes;
+        }
+
+        private T GetNode(TNullableKey id)
+        {
+            return GetNode((TKey)(object)id);
+        }
+
+        private T GetNode(TKey id)
+        {
+            return _nodesSet.Single(PropertyEqualsExpression(nameof(INestedSet<TKey, TNullableKey>.Id), id));
         }
     }
 }

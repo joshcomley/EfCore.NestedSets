@@ -161,6 +161,7 @@ CREATE TABLE [dbo].[Nodes](
 	[Name] [nvarchar](max) NOT NULL,
 	[Left] [int] NOT NULL,
 	[Right] [int] NOT NULL,
+	[RootId] [int] NOT NULL,
 	[ParentId] [int] NULL,
 	[Level] [int] NOT NULL,
  CONSTRAINT [PK_Nodes] PRIMARY KEY CLUSTERED 

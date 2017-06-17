@@ -9,6 +9,7 @@
         public int Right { get; set; }
         public string Name { get; set; }
         public bool Moving { get; set; }
+        public int RootId { get; set; }
 
         public Node() { }
 

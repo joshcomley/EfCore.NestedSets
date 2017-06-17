@@ -8,5 +8,6 @@ namespace EfCore.NestedSets
         int Left { get; set; }
         int Right { get; set; }
         bool Moving { get; set; }
+        TKey RootId { get; set; }
     }
 }
