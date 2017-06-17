@@ -89,6 +89,28 @@ namespace EfCore.NestedSets.Tests
         }
 
         [TestMethod]
+        public void TestSelectDescendantsWithMultipleTrees()
+        {
+            // Arrange
+            _nat.TestInsertSecondLevelChild();
+            _nat.TestMoveToSiblingRight();
+            // Action
+            var result = _ns.GetDescendants(_nat.Pets.Id).ToList();
+            // Assert
+            AssertResults(result,
+                _nat.Humans,
+                _nat.Males,
+                _nat.Hairy,
+                _nat.NonHairy,
+                _nat.Josh,
+                _nat.Females,
+                _nat.Cats,
+                _nat.HouseCats,
+                _nat.Kittens,
+                _nat.Tigers);
+        }
+
+        [TestMethod]
         public void TestSelectPathToNode1()
         {
             // Arrange
@@ -130,6 +152,9 @@ namespace EfCore.NestedSets.Tests
             );
         }
 
+        // TODO:
+        // Test selecting X levels deep
+        // Test 
         private static void AssertResultsAndOrder(IEnumerable<Node> nodesQuery, params Node[] expectedNodes)
         {
             AssertResults(nodesQuery, true, expectedNodes);
