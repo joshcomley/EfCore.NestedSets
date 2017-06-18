@@ -111,6 +111,34 @@ namespace EfCore.NestedSets.Tests
         }
 
         [TestMethod]
+        public void TestSelectSpecificDepthOfDescendants1()
+        {
+            // Arrange
+            _nat.TestMoveToSiblingRight();
+            // Action
+            var result = _ns.GetDescendants(_nat.Pets.Id, 1).ToList();
+            // Assert
+            AssertResults(result,
+                _nat.Humans,
+                _nat.Cats);
+        }
+
+        [TestMethod]
+        public void TestSelectSpecificDepthOfDescendants2()
+        {
+            // Arrange
+            _nat.TestMoveToSiblingRight();
+            // Action
+            var result = _ns.GetDescendants(_nat.Animals.Id, 2).ToList();
+            // Assert
+            AssertResults(result,
+                _nat.Dogs,
+                _nat.Pets,
+                _nat.Humans,
+                _nat.Cats);
+        }
+
+        [TestMethod]
         public void TestSelectPathToNode1()
         {
             // Arrange

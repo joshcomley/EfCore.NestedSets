@@ -392,21 +392,27 @@ namespace EfCore.NestedSets
         /// </summary>
         /// <param name="nodeId">The node for which to find the path to</param>
         /// <returns></returns>
-        public IQueryable<T> GetDescendants(TKey nodeId)
+        public IQueryable<T> GetDescendants(TKey nodeId, int? depth = null)
         {
             var node = GetNodeData(nodeId);
-            return _nodesSet.Where(n => n.Left > node.Left && n.Right < node.Right);
+            var query = _nodesSet.Where(n => n.Left > node.Left && n.Right < node.Right);
+            if (depth.HasValue)
+            {
+                query = query.Where(n => n.Level <= node.Level + depth.Value);
+            }
+            return query;
         }
 
         private NodeData<TNullableKey> GetNodeData(TKey nodeId)
         {
             var node = QueryById(_nodesSet, nodeId)
-                .Select(n => new NodeData<TNullableKey> {Left = n.Left, Right = n.Right, RootId = n.RootId}).Single();
+                .Select(n => new NodeData<TNullableKey> {Level = n.Level, Left = n.Left, Right = n.Right, RootId = n.RootId}).Single();
             return node;
         }
 
         private class NodeData<TNullableKey>
         {
+            public int Level { get; set; }
             public int Left { get; set; }
             public int Right { get; set; }
             public TNullableKey RootId { get; set; }
